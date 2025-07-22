@@ -1,0 +1,1327 @@
+import sqlite3
+import datetime
+import tkinter as tk
+from tkinter import messagebox, ttk
+from tkinter import font as tkfont
+import random
+
+class KnowledgeHubApp(tk.Tk):
+    def _init_(self):
+        super()._init_()
+        self.title("Knowledge Hub - World's #1 E-Learning Platform")
+        self.geometry("1000x700")
+        self.resizable(False, False)
+        
+        # Initialize database when app starts
+        self.init_db()
+        
+        # Container for all pages
+        self.container = tk.Frame(self)
+        self.container.pack(fill="both", expand=True)
+        self.container.grid_rowconfigure(0, weight=1)
+        self.container.grid_columnconfigure(0, weight=1)
+        
+        # Dictionary to hold all pages
+        self.pages = {}
+        
+        # Create all pages
+        for Page in (HomePage, AboutPage, ExplorePage, CoursesPage, ContactPage, LoginPage, PaymentPage):
+            page_name = Page._name_
+            frame = Page(parent=self.container, controller=self)
+            self.pages[page_name] = frame
+            frame.grid(row=0, column=0, sticky="nsew")
+        
+        # Show home page initially
+        self.show_page("HomePage")
+    
+    def init_db(self):
+        """Initialize the SQLite database and create tables if they don't exist"""
+        self.conn = sqlite3.connect('knowledge_hub.db')
+        self.cursor = self.conn.cursor()
+        
+        # Create tables
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE,
+                password TEXT NOT NULL,
+                role TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        ''')
+        
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS enrollments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                course_name TEXT NOT NULL,
+                university TEXT NOT NULL,
+                price REAL NOT NULL,
+                payment_method TEXT NOT NULL,
+                payment_date TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+        ''')
+        
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS login_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                email TEXT NOT NULL,
+                login_time TEXT NOT NULL,
+                status TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+        ''')
+        
+        # Add a demo user if none exists
+        self.cursor.execute("SELECT COUNT(*) FROM users")
+        if self.cursor.fetchone()[0] == 0:
+            self.register_user("Demo User", "demo@example.com", "password123", "Student")
+        
+        self.conn.commit()
+    
+    def register_user(self, username, email, password, role):
+        """Register a new user in the database"""
+        try:
+            self.cursor.execute('''
+                INSERT INTO users (username, email, password, role, created_at)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (username, email, password, role, datetime.datetime.now().isoformat()))
+            self.conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            messagebox.showerror("Error", "Email already exists!")
+            return False
+        except sqlite3.Error as e:
+            messagebox.showerror("Database Error", f"An error occurred: {e}")
+            return False
+    
+    def log_login_attempt(self, email, status, user_id=None):
+        """Record a login attempt in the database"""
+        try:
+            self.cursor.execute('''
+                INSERT INTO login_history (user_id, email, login_time, status)
+                VALUES (?, ?, ?, ?)
+            ''', (user_id, email, datetime.datetime.now().isoformat(), status))
+            self.conn.commit()
+        except sqlite3.Error as e:
+            print(f"Error logging login attempt: {e}")
+    
+    def record_enrollment(self, user_id, course_name, university, price, payment_method):
+        """Record a course enrollment in the database"""
+        try:
+            self.cursor.execute('''
+                INSERT INTO enrollments (user_id, course_name, university, price, payment_method, payment_date)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (user_id, course_name, university, price, payment_method, datetime.datetime.now().isoformat()))
+            self.conn.commit()
+            return True
+        except sqlite3.Error as e:
+            messagebox.showerror("Database Error", f"Failed to record enrollment: {e}")
+            return False
+    
+    def get_user_by_email(self, email):
+        """Retrieve user by email"""
+        try:
+            self.cursor.execute('SELECT * FROM users WHERE email = ?', (email,))
+            return self.cursor.fetchone()
+        except sqlite3.Error as e:
+            messagebox.showerror("Database Error", f"Failed to fetch user: {e}")
+            return None
+    
+    def show_page(self, page_name):
+        """Show a frame for the given page name"""
+        page = self.pages[page_name]
+        page.tkraise()
+        if hasattr(page, "on_show"):
+            page.on_show()
+    
+    def _del_(self):
+        """Close database connection when app closes"""
+        if hasattr(self, 'conn'):
+            self.conn.close()
+
+class BasePage(tk.Frame):
+    def _init_(self, parent, controller):
+        super()._init_(parent)
+        self.controller = controller
+        self.create_widgets()
+    
+    def create_widgets(self):
+        pass
+    
+    def on_show(self):
+        pass
+
+class HomePage(BasePage):
+    def create_widgets(self):
+        # Colors
+        self.HEADER_COLOR = "#2c3e50"
+        self.NAV_COLOR = "#3498db"
+        self.ACCENT_COLOR = "#e74c3c"
+        self.LIGHT_COLOR = "#ecf0f1"
+        self.WHITE = "#ffffff"
+        self.HOME_COLOR = "#FFA500"
+        
+        # Header Frame
+        header_frame = tk.Frame(self, bg=self.HEADER_COLOR, pady=15)
+        header_frame.pack(fill="x")
+        
+        # Logo and Title
+        logo_frame = tk.Frame(header_frame, bg=self.HEADER_COLOR)
+        logo_frame.pack(side="left", padx=20)
+        
+        tk.Label(logo_frame, text="📚", font=("Arial", 28), bg=self.HEADER_COLOR, fg=self.WHITE).pack(side="left")
+        tk.Label(logo_frame, text="Knowledge Hub", font=("Helvetica", 24, "bold"), 
+                fg=self.WHITE, bg=self.HEADER_COLOR).pack(side="left", padx=10)
+        
+        # Navigation Buttons
+        nav_frame = tk.Frame(self, bg=self.NAV_COLOR, pady=10)
+        nav_frame.pack(fill="x")
+        
+        nav_menu = [
+            ("🏠 Home", "HomePage"),
+            ("ℹ About Us", "AboutPage"),
+            ("🔍 Explore", "ExplorePage"),
+            ("📖 Courses", "CoursesPage"),
+            ("🔑 Login", "LoginPage"),
+            ("📞 Contact Us", "ContactPage")
+        ]
+        
+        for text, page in nav_menu:
+            btn_color = self.HOME_COLOR if page == "HomePage" else self.NAV_COLOR
+            tk.Button(
+                nav_frame, 
+                text=text, 
+                font=("Helvetica", 12),
+                bg=btn_color, 
+                fg=self.WHITE, 
+                relief="flat",
+                activebackground=self.LIGHT_COLOR,
+                activeforeground=self.HEADER_COLOR,
+                command=lambda p=page: self.controller.show_page(p)
+            ).pack(side="left", padx=5, ipadx=10)
+        
+        # Welcome Section
+        welcome_frame = tk.Frame(self, bg=self.LIGHT_COLOR)
+        welcome_frame.pack(fill="both", expand=True, pady=20, padx=50)
+        
+        tk.Label(
+            welcome_frame, 
+            text="🌟 World's #1 Teaching & Learning Platform 🌟", 
+            font=("Helvetica", 36, "bold"), 
+            bg=self.LIGHT_COLOR, 
+            fg=self.HEADER_COLOR,
+            wraplength=800
+        ).pack(pady=50)
+        
+        tk.Label(
+            welcome_frame, 
+            text="Join over 10 million learners worldwide and unlock your potential today!", 
+            font=("Helvetica", 18, "bold"), 
+            bg=self.LIGHT_COLOR, 
+            fg=self.ACCENT_COLOR
+        ).pack(pady=10)
+        
+        tk.Button(
+            welcome_frame, 
+            text="🚀 Start Learning Now - It's FREE!", 
+            font=("Helvetica", 18, "bold"),
+            bg=self.ACCENT_COLOR, 
+            fg=self.WHITE, 
+            relief="raised", 
+            padx=20, 
+            pady=10,
+            command=lambda: self.controller.show_page("CoursesPage")
+        ).pack(pady=20)
+        
+        # Stats Section
+        stats_frame = tk.Frame(self, bg=self.WHITE, pady=30)
+        stats_frame.pack(fill="x", padx=50)
+        
+        stats = [
+            ("📊 50,000+", "Courses Available"), 
+            ("🎓 10 Million+", "Students Enrolled"), 
+            ("🌍 200+", "Countries Reached"), 
+            ("🏆 5,000+", "Expert Instructors")
+        ]
+        
+        for stat, description in stats:
+            stat_container = tk.Frame(stats_frame, bg=self.WHITE)
+            stat_container.pack(side="left", expand=True)
+            
+            tk.Label(
+                stat_container, 
+                text=stat, 
+                font=("Helvetica", 18, "bold"), 
+                bg=self.WHITE, 
+                fg=self.HEADER_COLOR
+            ).pack()
+            
+            tk.Label(
+                stat_container, 
+                text=description, 
+                font=("Helvetica", 12), 
+                bg=self.WHITE, 
+                fg=self.NAV_COLOR
+            ).pack()
+        
+        # Footer
+        footer_frame = tk.Frame(self, bg=self.HEADER_COLOR, pady=15)
+        footer_frame.pack(fill="x", side="bottom")
+        
+        # Social Media Icons
+        social_frame = tk.Frame(footer_frame, bg=self.HEADER_COLOR)
+        social_frame.pack(side="left", padx=30)
+        
+        social_icons = [
+            ("📘 Facebook", "#1877f2"), 
+            ("🐦 Twitter", "#1da1f2"), 
+            ("📷 Instagram", "#e1306c")
+        ]
+        
+        for icon, color in social_icons:
+            tk.Button(
+                social_frame, 
+                text=icon, 
+                font=("Helvetica", 12),
+                bg=self.HEADER_COLOR, 
+                fg=color, 
+                relief="flat",
+                activebackground=self.HEADER_COLOR,
+                activeforeground=self.WHITE,
+                bd=0
+            ).pack(side="left", padx=10)
+        
+        # Copyright Info
+        tk.Label(
+            footer_frame, 
+            text="© 2025 Knowledge Hub. All Rights Reserved. | Terms | Privacy", 
+            font=("Arial", 10), 
+            fg=self.WHITE, 
+            bg=self.HEADER_COLOR
+        ).pack(side="right", padx=30)
+
+class AboutPage(BasePage):
+    def create_widgets(self):
+        # Colors
+        self.HEADER_COLOR = "#2c3e50"
+        self.WHITE = "#ffffff"
+        self.GRADIENT_COLOR1 = "#4b9cd3"
+        
+        # Header with back button
+        header_frame = tk.Frame(self, bg=self.HEADER_COLOR, pady=15)
+        header_frame.pack(fill="x")
+        
+        tk.Button(
+            header_frame, 
+            text="← Back", 
+            font=("Helvetica", 12),
+            bg=self.HEADER_COLOR, 
+            fg=self.WHITE,
+            relief="flat",
+            command=lambda: self.controller.show_page("HomePage")
+        ).pack(side="left", padx=10)
+        
+        tk.Label(
+            header_frame, 
+            text="About Us", 
+            font=("Helvetica", 20, "bold"), 
+            bg=self.HEADER_COLOR, 
+            fg=self.WHITE
+        ).pack(side="left", padx=20)
+        
+        # About Us Section
+        about_frame = tk.Frame(self, bg=self.GRADIENT_COLOR1)
+        about_frame.pack(fill="both", expand=True)
+        
+        tk.Label(
+            about_frame, 
+            text="🌟 Welcome to Knowledge Hub 🌟", 
+            font=("Helvetica", 24, "bold"), 
+            bg=self.GRADIENT_COLOR1, 
+            fg=self.WHITE
+        ).pack(pady=20)
+        
+        tk.Label(
+            about_frame, 
+            text="Welcome to Knowledge Hub! 🚀 We are the leading e-learning platform, designed to provide high-quality education for learners worldwide 🌍.\n\nOur mission is to empower individuals to learn, grow, and achieve their potential in various fields, with the help of expert instructors and a wide range of interactive courses 🧑‍🏫. We believe in accessible learning that makes a difference. Join millions of learners and start your journey today! 💡", 
+            font=("Helvetica", 12), 
+            bg=self.GRADIENT_COLOR1, 
+            fg=self.WHITE,
+            wraplength=800
+        ).pack(pady=20)
+        
+        # Stats Section
+        stats_frame = tk.Frame(self, bg=self.WHITE, pady=30)
+        stats_frame.pack(fill="x", padx=50)
+        
+        stats = [
+            ("📊 50,000+", "Courses Available"), 
+            ("🎓 10 Million+", "Students Enrolled"), 
+            ("🌍 200+", "Countries Reached"), 
+            ("🏆 5,000+", "Expert Instructors")
+        ]
+        
+        for stat, description in stats:
+            stat_container = tk.Frame(stats_frame, bg=self.WHITE)
+            stat_container.pack(side="left", expand=True)
+            
+            tk.Label(
+                stat_container, 
+                text=stat, 
+                font=("Helvetica", 18, "bold"), 
+                bg=self.WHITE, 
+                fg=self.HEADER_COLOR
+            ).pack()
+            
+            tk.Label(
+                stat_container, 
+                text=description, 
+                font=("Helvetica", 12), 
+                bg=self.WHITE, 
+                fg="#3498db"
+            ).pack()
+        
+        # Footer
+        footer_frame = tk.Frame(self, bg=self.HEADER_COLOR, pady=15)
+        footer_frame.pack(fill="x", side="bottom")
+        
+        # Social Media Icons
+        social_frame = tk.Frame(footer_frame, bg=self.HEADER_COLOR)
+        social_frame.pack(side="left", padx=30)
+        
+        social_icons = [
+            ("📘 Facebook", "#1877f2"), 
+            ("🐦 Twitter", "#1da1f2"), 
+            ("📷 Instagram", "#e1306c")
+        ]
+        
+        for icon, color in social_icons:
+            tk.Button(
+                social_frame, 
+                text=icon, 
+                font=("Helvetica", 12),
+                bg=self.HEADER_COLOR, 
+                fg=color, 
+                relief="flat",
+                activebackground=self.HEADER_COLOR,
+                activeforeground=self.WHITE,
+                bd=0
+            ).pack(side="left", padx=10)
+        
+        # Copyright Info
+        tk.Label(
+            footer_frame, 
+            text="© 2025 Knowledge Hub. All Rights Reserved. | Terms | Privacy", 
+            font=("Arial", 10), 
+            fg=self.WHITE, 
+            bg=self.HEADER_COLOR
+        ).pack(side="right", padx=30)
+
+class ExplorePage(BasePage):
+    def create_widgets(self):
+        # Colors
+        self.HEADER_COLOR = "#2c3e50"
+        self.WHITE = "#ffffff"
+        self.GRADIENT_COLOR1 = "#FF77B6"
+        
+        # Header with back button
+        header_frame = tk.Frame(self, bg=self.HEADER_COLOR, pady=15)
+        header_frame.pack(fill="x")
+        
+        tk.Button(
+            header_frame, 
+            text="← Back", 
+            font=("Helvetica", 12),
+            bg=self.HEADER_COLOR, 
+            fg=self.WHITE,
+            relief="flat",
+            command=lambda: self.controller.show_page("HomePage")
+        ).pack(side="left", padx=10)
+        
+        tk.Label(
+            header_frame, 
+            text="Explore", 
+            font=("Helvetica", 20, "bold"), 
+            bg=self.HEADER_COLOR, 
+            fg=self.WHITE
+        ).pack(side="left", padx=20)
+        
+        # Explore Section
+        explore_frame = tk.Frame(self, bg=self.GRADIENT_COLOR1)
+        explore_frame.pack(fill="both", expand=True)
+        
+        tk.Label(
+            explore_frame, 
+            text="🌟 Explore Our Courses 🌟", 
+            font=("Helvetica", 24, "bold"), 
+            bg=self.GRADIENT_COLOR1, 
+            fg=self.WHITE
+        ).pack(pady=20)
+        
+        tk.Label(
+            explore_frame, 
+            text="Discover a wide variety of courses ranging from coding to design to business and more! 🚀 Whether you're a beginner or an expert, we have something for everyone 🌍. Learn at your own pace, from anywhere in the world! 🌎",
+            font=("Helvetica", 12), 
+            bg=self.GRADIENT_COLOR1, 
+            fg=self.WHITE,
+            wraplength=800
+        ).pack(pady=20)
+        
+        # Course Categories Section
+        course_frame = tk.Frame(self, bg=self.WHITE, pady=30)
+        course_frame.pack(fill="x", padx=50)
+        
+        course_categories = [
+            ("💻 Coding & Development", "Learn the latest coding languages and frameworks."),
+            ("🎨 Graphic Design", "Master design tools and create stunning visuals."),
+            ("📈 Business & Marketing", "Grow your business skills and reach your goals."),
+            ("🧑‍🏫 Teaching & Education", "Explore new ways to teach and inspire others."),
+            ("🖥 IT & Networking", "Get certified in various IT and networking fields.")
+        ]
+        
+        for title, description in course_categories:
+            category_container = tk.Frame(course_frame, bg=self.WHITE)
+            category_container.pack(side="left", expand=True, padx=30)
+            
+            tk.Label(
+                category_container, 
+                text=title, 
+                font=("Helvetica", 14, "bold"), 
+                bg=self.WHITE, 
+                fg=self.HEADER_COLOR
+            ).pack()
+            
+            tk.Label(
+                category_container, 
+                text=description, 
+                font=("Helvetica", 12), 
+                bg=self.WHITE, 
+                fg="#3498db"
+            ).pack()
+        
+        # Footer
+        footer_frame = tk.Frame(self, bg=self.HEADER_COLOR, pady=15)
+        footer_frame.pack(fill="x", side="bottom")
+        
+        # Social Media Icons
+        social_frame = tk.Frame(footer_frame, bg=self.HEADER_COLOR)
+        social_frame.pack(side="left", padx=30)
+        
+        social_icons = [
+            ("📘 Facebook", "#1877f2"), 
+            ("🐦 Twitter", "#1da1f2"), 
+            ("📷 Instagram", "#e1306c")
+        ]
+        
+        for icon, color in social_icons:
+            tk.Button(
+                social_frame, 
+                text=icon, 
+                font=("Helvetica", 12),
+                bg=self.HEADER_COLOR, 
+                fg=color, 
+                relief="flat",
+                activebackground=self.HEADER_COLOR,
+                activeforeground=self.WHITE,
+                bd=0
+            ).pack(side="left", padx=10)
+        
+        # Copyright Info
+        tk.Label(
+            footer_frame, 
+            text="© 2025 Knowledge Hub. All Rights Reserved. | Terms | Privacy", 
+            font=("Arial", 10), 
+            fg=self.WHITE, 
+            bg=self.HEADER_COLOR
+        ).pack(side="right", padx=30)
+
+class CoursesPage(BasePage):
+    def create_widgets(self):
+        # Colors
+        self.HEADER_COLOR = "#2c3e50"
+        self.WHITE = "white"
+        self.BOX_COLORS = ["#f8d5f0", "#d4f1f9", "#f9f4d4", "#d4f9e0", "#f9e0d4", "#e8d4f9"]
+        
+        # Header with back button
+        header_frame = tk.Frame(self, bg=self.HEADER_COLOR, pady=15)
+        header_frame.pack(fill="x")
+        
+        tk.Button(
+            header_frame, 
+            text="← Back", 
+            font=("Helvetica", 12),
+            bg=self.HEADER_COLOR, 
+            fg=self.WHITE,
+            relief="flat",
+            command=lambda: self.controller.show_page("HomePage")
+        ).pack(side="left", padx=10)
+        
+        tk.Label(
+            header_frame, 
+            text="Courses", 
+            font=("Helvetica", 20, "bold"), 
+            bg=self.HEADER_COLOR, 
+            fg=self.WHITE
+        ).pack(side="left", padx=20)
+        
+        # Search bar
+        search_frame = tk.Frame(self, pady=15)
+        search_frame.pack(fill="x", padx=20)
+        
+        tk.Label(
+            search_frame, 
+            text="🔍 Search:", 
+            font=("Helvetica", 12)
+        ).pack(side="left", padx=10)
+        
+        self.search_entry = tk.Entry(
+            search_frame, 
+            font=("Helvetica", 12), 
+            width=40
+        )
+        self.search_entry.pack(side="left", padx=5)
+        
+        tk.Button(
+            search_frame, 
+            text="Search", 
+            bg="#3498db", 
+            fg=self.WHITE, 
+            font=("Helvetica", 12),
+            command=self.search_courses
+        ).pack(side="left")
+        
+        # Courses display area with scrollbar
+        self.canvas = tk.Canvas(self, bg="#ecf0f1")
+        self.scrollbar = tk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
+        self.scrollable_frame = tk.Frame(self.canvas, bg="#ecf0f1")
+        
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(
+                scrollregion=self.canvas.bbox("all")
+            )
+        )
+        
+        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.scrollbar.pack(side="right", fill="y")
+        
+        # Course data
+        self.courses = [
+            ("Python Programming", "Harvard University", 99, "🎓"),
+            ("Data Science Bootcamp", "MIT", 200, "🏫"),
+            ("Web Development", "Stanford", 150, "💻"),
+            ("AI & Machine Learning", "UC Berkeley", 180, "🧠"),
+            ("Graphic Design", "London Arts", 120, "🎨"),
+            ("Business Analytics", "Harvard", 130, "📈"),
+            ("Cybersecurity", "Oxford", 170, "🛡"),
+            ("Cloud Computing", "Stanford", 160, "☁"),
+            ("Mobile App Development", "MIT", 140, "📱"),
+            ("Game Design Fundamentals", "CalArts", 110, "🎮"),
+            ("Digital Marketing", "NYU", 90, "📢"),
+            ("Blockchain Technology", "Princeton", 210, "⛓"),
+            ("Advanced Python", "Harvard", 120, "🐍"),
+            ("Data Visualization", "MIT", 150, "📊"),
+            ("UX/UI Design", "Stanford", 160, "✏"),
+            ("Deep Learning", "UC Berkeley", 220, "🧠"),
+            ("Machine Learning Basics", "Cambridge", 175, "⚙"),
+            ("Database Management", "Yale", 125, "🗄"),
+            ("Network Security", "Columbia", 190, "🖧"),
+            ("Software Engineering", "Chicago", 145, "💻"),
+            ("Algorithms & Data Structures", "Brown", 165, "🧮"),
+            ("iOS App Development", "Dartmouth", 155, "📱"),
+            ("Android Development", "Cornell", 135, "📱"),
+            ("Artificial Intelligence", "Penn", 205, "🤖")
+        ]
+        
+        # Initial display
+        self.update_courses(self.courses)
+    
+    def search_courses(self):
+        search_term = self.search_entry.get().lower()
+        filtered = [course for course in self.courses if search_term in course[0].lower()]
+        self.update_courses(filtered)
+    
+    def update_courses(self, filtered_courses):
+        for widget in self.scrollable_frame.winfo_children():
+            widget.destroy()
+        
+        # Create 6 courses per row
+        row_frame = None
+        for i, course in enumerate(filtered_courses):
+            if i % 6 == 0:  # New row after every 6 courses
+                row_frame = tk.Frame(self.scrollable_frame, bg="#ecf0f1")
+                row_frame.pack(fill="x", pady=5)
+            
+            self.create_course_widget(row_frame, course, self.BOX_COLORS[i % len(self.BOX_COLORS)])
+    
+    def create_course_widget(self, parent, course, bg_color):
+        course_name, university, price, uni_icon = course
+        
+        # Icons for different course categories
+        category_icons = {
+            "Python": "🐍", "Data": "📊", "Web": "🌐", 
+            "AI": "🤖", "Design": "🎨", "Business": "💼",
+            "Cyber": "🔒", "Cloud": "☁", "Mobile": "📱",
+            "Game": "🎮", "Marketing": "📢", "Blockchain": "⛓",
+            "Advanced": "🔥", "Visualization": "📈", "UX/UI": "✏",
+            "Deep": "🧠", "Machine": "⚙", "Database": "🗄",
+            "Network": "🖧", "Software": "💻", "Algorithm": "🧮"
+        }
+        
+        # Determine icon based on course name
+        icon = "📚"  # Default icon
+        for key in category_icons:
+            if key.lower() in course_name.lower():
+                icon = category_icons[key]
+                break
+        
+        # Create course box
+        box = tk.Frame(parent, bg=bg_color, padx=10, pady=10, 
+                      relief="ridge", bd=2, width=150, height=150)
+        box.pack_propagate(False)
+        box.pack(side="left", padx=5, fill="none", expand=True)
+        
+        # Course icon
+        tk.Label(box, text=icon, font=("Arial", 20), bg=bg_color).pack()
+        
+        # Course name (truncated if too long)
+        short_name = (course_name[:15] + '...') if len(course_name) > 15 else course_name
+        tk.Label(box, text=short_name, font=("Arial", 10, "bold"), 
+                bg=bg_color, wraplength=120).pack()
+        
+        # University info
+        tk.Label(box, text=f"{uni_icon} {university.split()[0]}", 
+                font=("Arial", 8), bg=bg_color).pack()
+        
+        # Price
+        tk.Label(box, text=f"${price}", font=("Arial", 10, "bold"), 
+                bg=bg_color, fg="#27ae60").pack()
+        
+        # Enroll button
+        tk.Button(box, text="Enroll", font=("Arial", 8), bg="#3498db", fg=self.WHITE,
+                 command=lambda c=course_name, u=university, p=price: self.course_selected(c, u, p)
+                 ).pack(pady=2, fill="x")
+    
+    def course_selected(self, course_name, university, price):
+        response = messagebox.askquestion("Enroll Now", 
+                       f"Do you want to enroll in '{course_name}' by {university} for ${price}?")
+        if response == 'yes':
+            payment_page = self.controller.pages["PaymentPage"]
+            payment_page.set_course((course_name, university, price))
+            self.controller.show_page("PaymentPage")
+
+class ContactPage(BasePage):
+    def create_widgets(self):
+        # Colors
+        self.HEADER_COLOR = "#2c3e50"
+        self.WHITE = "#ffffff"
+        self.GREY_BACKGROUND = "#BDC3C7"
+        
+        # Header with back button
+        header_frame = tk.Frame(self, bg=self.HEADER_COLOR, pady=15)
+        header_frame.pack(fill="x")
+        
+        tk.Button(
+            header_frame, 
+            text="← Back", 
+            font=("Helvetica", 12),
+            bg=self.HEADER_COLOR, 
+            fg=self.WHITE,
+            relief="flat",
+            command=lambda: self.controller.show_page("HomePage")
+        ).pack(side="left", padx=10)
+        
+        tk.Label(
+            header_frame, 
+            text="Contact Us", 
+            font=("Helvetica", 20, "bold"), 
+            bg=self.HEADER_COLOR, 
+            fg=self.WHITE
+        ).pack(side="left", padx=20)
+        
+        # Contact Us Section
+        contact_frame = tk.Frame(self, bg=self.GREY_BACKGROUND)
+        contact_frame.pack(fill="both", expand=True)
+        
+        tk.Label(
+            contact_frame, 
+            text="📞 Get in Touch with Us 📞", 
+            font=("Helvetica", 24, "bold"), 
+            bg=self.GREY_BACKGROUND, 
+            fg=self.HEADER_COLOR
+        ).pack(pady=20)
+        
+        tk.Label(
+            contact_frame, 
+            text="Have any questions or need support? We're here to help! ✨ Whether you're a student, teacher, or partner, feel free to reach out to us 📧. We're available through multiple channels and will get back to you as soon as possible! ⏱",
+            font=("Helvetica", 12), 
+            bg=self.GREY_BACKGROUND, 
+            fg=self.HEADER_COLOR,
+            wraplength=800,
+            justify="center"
+        ).pack(pady=20)
+        
+        # Contact Information Section
+        info_frame = tk.Frame(self, bg=self.WHITE, pady=30)
+        info_frame.pack(fill="x", padx=50)
+        
+        contact_info = [
+            ("✉ Email Us", "support@knowledgehub.com"),
+            ("📞 Call Us", "+1 (800) 123-4567"),
+            ("🌍 Visit Us", "123 Knowledge St, Suite 100, Lhr, Pakistan")
+        ]
+        
+        for icon, text in contact_info:
+            info_container = tk.Frame(info_frame, bg=self.WHITE)
+            info_container.pack(side="left", expand=True, padx=30)
+            
+            tk.Label(
+                info_container, 
+                text=icon, 
+                font=("Helvetica", 18, "bold"), 
+                bg=self.WHITE, 
+                fg=self.HEADER_COLOR
+            ).pack()
+            
+            tk.Label(
+                info_container, 
+                text=text, 
+                font=("Helvetica", 12), 
+                bg=self.WHITE, 
+                fg="#3498db"
+            ).pack()
+        
+        # Footer
+        footer_frame = tk.Frame(self, bg=self.HEADER_COLOR, pady=15)
+        footer_frame.pack(fill="x", side="bottom")
+        
+        # Social Media Icons
+        social_frame = tk.Frame(footer_frame, bg=self.HEADER_COLOR)
+        social_frame.pack(side="left", padx=30)
+        
+        social_icons = [
+            ("📘 Facebook", "#1877f2"), 
+            ("🐦 Twitter", "#1da1f2"), 
+            ("📷 Instagram", "#e1306c")
+        ]
+        
+        for icon, color in social_icons:
+            tk.Button(
+                social_frame, 
+                text=icon, 
+                font=("Helvetica", 12),
+                bg=self.HEADER_COLOR, 
+                fg=color, 
+                relief="flat",
+                activebackground=self.HEADER_COLOR,
+                activeforeground=self.WHITE,
+                bd=0
+            ).pack(side="left", padx=10)
+        
+        # Copyright Info
+        tk.Label(
+            footer_frame, 
+            text="© 2025 Knowledge Hub. All Rights Reserved. | Terms | Privacy", 
+            font=("Arial", 10), 
+            fg=self.WHITE, 
+            bg=self.HEADER_COLOR
+        ).pack(side="right", padx=30)
+
+class LoginPage(BasePage):
+    def create_widgets(self):
+        # Colors
+        self.PRIMARY_COLOR = "#2c3e50"
+        self.SECONDARY_COLOR = "#3498db"
+        self.ACCENT_COLOR = "#e74c3c"
+        self.LIGHT_COLOR = "#ecf0f1"
+        self.WHITE = "#ffffff"
+        
+        # Header with back button
+        header_frame = tk.Frame(self, bg=self.PRIMARY_COLOR, pady=15)
+        header_frame.pack(fill="x")
+        
+        tk.Button(
+            header_frame, 
+            text="← Back", 
+            font=("Helvetica", 12),
+            bg=self.PRIMARY_COLOR, 
+            fg=self.WHITE,
+            relief="flat",
+            command=lambda: self.controller.show_page("HomePage")
+        ).pack(side="left", padx=10)
+        
+        tk.Label(
+            header_frame, 
+            text="Login", 
+            font=("Helvetica", 20, "bold"), 
+            bg=self.PRIMARY_COLOR, 
+            fg=self.WHITE
+        ).pack(side="left", padx=20)
+        
+        # Main container
+        main_frame = tk.Frame(self, bg=self.WHITE, padx=40, pady=40)
+        main_frame.place(relx=0.5, rely=0.5, anchor="center")
+        
+        # Header with logo
+        header_login_frame = tk.Frame(main_frame, bg=self.WHITE)
+        header_login_frame.pack(pady=(0, 20))
+        
+        tk.Label(
+            header_login_frame, 
+            text="📚", 
+            font=("Arial", 40), 
+            bg=self.WHITE
+        ).pack(side="left")
+        
+        tk.Label(
+            header_login_frame, 
+            text="Knowledge Hub", 
+            font=("Helvetica", 28, "bold"), 
+            bg=self.WHITE, 
+            fg=self.PRIMARY_COLOR
+        ).pack(side="left", padx=10)
+        
+        tk.Label(
+            main_frame, 
+            text="🔐 Welcome Back!", 
+            font=("Helvetica", 18, "bold"), 
+            bg=self.WHITE, 
+            fg=self.SECONDARY_COLOR
+        ).pack(pady=(0, 30))
+        
+        # Role selection
+        role_frame = tk.Frame(main_frame, bg=self.WHITE)
+        role_frame.pack(pady=(0, 20))
+        
+        roles = [
+            ("👑 Admin", self.PRIMARY_COLOR),
+            ("👩‍🏫 Teacher", self.SECONDARY_COLOR),
+            ("🎓 Student", self.ACCENT_COLOR)
+        ]
+        
+        self.selected_role = tk.StringVar(value="Student")
+        
+        for text, color in roles:
+            tk.Radiobutton(
+                role_frame,
+                text=text,
+                font=("Helvetica", 12),
+                variable=self.selected_role,
+                value=text.split()[1],
+                bg=self.WHITE,
+                fg=color,
+                selectcolor=self.WHITE,
+                activebackground=self.WHITE,
+                activeforeground=color,
+                indicatoron=0,
+                width=12,
+                padx=10,
+                pady=5,
+                bd=2,
+                relief="solid"
+            ).pack(side="left", padx=5)
+        
+        # Login form
+        form_frame = tk.Frame(main_frame, bg=self.WHITE)
+        form_frame.pack(pady=20)
+        
+        # Email field
+        email_frame = tk.Frame(form_frame, bg=self.WHITE)
+        email_frame.pack(pady=10, fill="x")
+        
+        tk.Label(
+            email_frame, 
+            text="📧", 
+            font=("Arial", 16), 
+            bg=self.WHITE
+        ).pack(side="left", padx=(0, 10))
+        
+        self.email_entry = ttk.Entry(email_frame, width=30, font=("Helvetica", 12))
+        self.email_entry.pack(side="left")
+        self.email_entry.insert(0, "Enter your email")
+        self.email_entry.bind("<FocusIn>", self.clear_email_default)
+        
+        # Password field
+        password_frame = tk.Frame(form_frame, bg=self.WHITE)
+        password_frame.pack(pady=10, fill="x")
+        
+        tk.Label(
+            password_frame, 
+            text="🔒", 
+            font=("Arial", 16), 
+            bg=self.WHITE
+        ).pack(side="left", padx=(0, 10))
+        
+        self.password_entry = ttk.Entry(password_frame, width=30, font=("Helvetica", 12), show="*")
+        self.password_entry.pack(side="left")
+        
+        # Options
+        options_frame = tk.Frame(form_frame, bg=self.WHITE)
+        options_frame.pack(pady=10, fill="x")
+        
+        self.remember_var = tk.BooleanVar()
+        tk.Checkbutton(
+            options_frame,
+            text="Remember me",
+            font=("Helvetica", 10),
+            bg=self.WHITE,
+            fg=self.PRIMARY_COLOR,
+            activebackground=self.WHITE,
+            activeforeground=self.PRIMARY_COLOR,
+            variable=self.remember_var
+        ).pack(side="left")
+        
+        tk.Button(
+            options_frame,
+            text="Forgot password?",
+            font=("Helvetica", 10),
+            bg=self.WHITE,
+            fg=self.ACCENT_COLOR,
+            activebackground=self.WHITE,
+            activeforeground=self.ACCENT_COLOR,
+            bd=0,
+            relief="flat",
+            command=self.show_forgot_password
+        ).pack(side="right")
+        
+        # Login button
+        tk.Button(
+            main_frame,
+            text="🚀 Login",
+            font=("Helvetica", 18, "bold"),
+            bg=self.ACCENT_COLOR,
+            fg=self.WHITE,
+            activebackground=self.ACCENT_COLOR,
+            activeforeground=self.WHITE,
+            padx=30,
+            pady=10,
+            bd=0,
+            relief="flat",
+            command=self.attempt_login
+        ).pack(pady=20, fill="x")
+        
+        # Divider
+        tk.Frame(main_frame, height=2, bg=self.LIGHT_COLOR).pack(fill="x", pady=20)
+        
+        # Social login
+        social_frame = tk.Frame(main_frame, bg=self.WHITE)
+        social_frame.pack()
+        
+        tk.Label(
+            social_frame,
+            text="Or login with:",
+            font=("Helvetica", 10),
+            bg=self.WHITE,
+            fg=self.PRIMARY_COLOR
+        ).pack(pady=(0, 10))
+        
+        social_buttons = [
+            ("Google", "🔵", "#4285F4"),
+            ("Facebook", "🔷", "#1877F2"),
+            ("Microsoft", "🔹", "#00A1F1")
+        ]
+        
+        for platform, icon, color in social_buttons:
+            tk.Button(
+                social_frame,
+                text=f"{icon} {platform}",
+                font=("Helvetica", 12),
+                bg=color,
+                fg=self.WHITE,
+                activebackground=color,
+                activeforeground=self.WHITE,
+                padx=20,
+                pady=5,
+                bd=0,
+                relief="flat"
+            ).pack(side="left", padx=5, fill="x", expand=True)
+        
+        # Footer
+        footer_frame = tk.Frame(self, bg=self.PRIMARY_COLOR, pady=10)
+        footer_frame.pack(side="bottom", fill="x")
+        
+        tk.Label(
+            footer_frame,
+            text="© 2025 Knowledge Hub. All rights reserved.",
+            font=("Helvetica", 10),
+            bg=self.PRIMARY_COLOR,
+            fg=self.WHITE
+        ).pack()
+    
+    def clear_email_default(self, event):
+        if self.email_entry.get() == "Enter your email":
+            self.email_entry.delete(0, tk.END)
+    
+    def attempt_login(self):
+        role = self.selected_role.get()
+        email = self.email_entry.get()
+        password = self.password_entry.get()
+        
+        if not email or not password or email == "Enter your email":
+            self.controller.log_login_attempt(email, "failed")
+            messagebox.showerror("Error", "Please fill in all fields")
+            return
+        
+        # Check credentials in database
+        user = self.controller.get_user_by_email(email)
+        
+        if user and user[3] == password and user[4] == role:
+            self.controller.log_login_attempt(email, "success", user[0])
+            messagebox.showinfo(
+                "Login Successful", 
+                f"Welcome {role}!\n\nEmail: {email}\nRole: {role}"
+            )
+            self.controller.show_page("HomePage")
+        else:
+            self.controller.log_login_attempt(email, "failed")
+            messagebox.showerror("Login Failed", "Invalid email, password, or role")
+    
+    def show_forgot_password(self):
+        forgot_window = tk.Toplevel(self)
+        forgot_window.title("Reset Password")
+        forgot_window.geometry("500x300")
+        forgot_window.configure(bg="white")
+        
+        # Center the forgot password window
+        forgot_window.update_idletasks()
+        width = forgot_window.winfo_width()
+        height = forgot_window.winfo_height()
+        x = (forgot_window.winfo_screenwidth() // 2) - (width // 2)
+        y = (forgot_window.winfo_screenheight() // 2) - (height // 2)
+        forgot_window.geometry(f"+{x}+{y}")
+        
+        tk.Label(
+            forgot_window,
+            text="🔑 Reset Your Password",
+            font=("Helvetica", 18, "bold"),
+            bg="white",
+            fg="#e74c3c"
+        ).pack(pady=20)
+        
+        tk.Label(
+            forgot_window,
+            text="Enter your email to receive a password reset link:",
+            font=("Helvetica", 12),
+            bg="white",
+            fg="#2c3e50"
+        ).pack(pady=10)
+        
+        email_frame = tk.Frame(forgot_window, bg="white")
+        email_frame.pack(pady=20)
+        
+        tk.Label(
+            email_frame,
+            text="📧",
+            font=("Arial", 16),
+            bg="white"
+        ).pack(side="left", padx=(0, 10))
+        
+        reset_email = ttk.Entry(email_frame, width=30, font=("Helvetica", 12))
+        reset_email.pack(side="left")
+        
+        def send_reset_link():
+            email = reset_email.get()
+            if "@" not in email or "." not in email:
+                messagebox.showerror("Error", "Please enter a valid email address")
+                return
+            
+            messagebox.showinfo(
+                "Reset Link Sent",
+                f"Password reset link sent to {email}\nPlease check your inbox."
+            )
+            forgot_window.destroy()
+        
+        tk.Button(
+            forgot_window,
+            text="✉ Send Reset Link",
+            font=("Helvetica", 12),
+            bg="#e74c3c",
+            fg="white",
+            command=send_reset_link,
+            padx=20,
+            pady=5
+        ).pack(pady=20)
+
+class PaymentPage(BasePage):
+    def _init_(self, parent, controller):
+        super()._init_(parent, controller)
+        self.course_info = {}
+        self.current_user = None  # Will be set when user logs in
+    
+    def create_widgets(self):
+        # Colors
+        self.HEADER_COLOR = "#2c3e50"
+        self.WHITE = "white"
+        
+        # Header with back button
+        header_frame = tk.Frame(self, bg=self.HEADER_COLOR, pady=15)
+        header_frame.pack(fill="x")
+        
+        tk.Button(
+            header_frame, 
+            text="← Back", 
+            font=("Helvetica", 12),
+            bg=self.HEADER_COLOR, 
+            fg=self.WHITE,
+            relief="flat",
+            command=lambda: self.controller.show_page("CoursesPage")
+        ).pack(side="left", padx=10)
+        
+        tk.Label(
+            header_frame, 
+            text="Complete Enrollment", 
+            font=("Helvetica", 20, "bold"), 
+            bg=self.HEADER_COLOR, 
+            fg=self.WHITE
+        ).pack(side="left", padx=20)
+        
+        # Payment form container
+        self.form_frame = tk.Frame(self)
+        self.form_frame.pack(fill="both", expand=True)
+    
+    def set_course(self, course):
+        self.course_info = {
+            "name": course[0],
+            "university": course[1],
+            "price": course[2]
+        }
+        self.update_payment_form()
+    
+    def update_payment_form(self):
+        # Clear previous widgets
+        for widget in self.form_frame.winfo_children():
+            widget.destroy()
+        
+        if not self.course_info:
+            tk.Label(self.form_frame, text="No course selected").pack()
+            return
+        
+        # Display course info
+        info_frame = tk.Frame(self.form_frame, bd=1, relief="groove", padx=10, pady=10)
+        info_frame.pack(fill="x", padx=50, pady=10)
+        
+        tk.Label(
+            info_frame, 
+            text=f"Course: {self.course_info['name']}", 
+            font=("Helvetica", 12)
+        ).pack(anchor="w")
+        
+        tk.Label(
+            info_frame, 
+            text=f"University: {self.course_info['university']}", 
+            font=("Helvetica", 12)
+        ).pack(anchor="w")
+        
+        tk.Label(
+            info_frame, 
+            text=f"Price: ${self.course_info['price']}", 
+            font=("Helvetica", 12, "bold")
+        ).pack(anchor="w")
+        
+        # Payment form
+        form = tk.Frame(self.form_frame)
+        form.pack(pady=20)
+        
+        tk.Label(
+            form, 
+            text="Payment Information", 
+            font=("Helvetica", 14, "bold")
+        ).grid(row=0, column=0, columnspan=2, pady=10)
+        
+        # Full Name
+        tk.Label(form, text="Full Name:").grid(row=1, column=0, sticky="e", padx=5, pady=5)
+        self.name_entry = ttk.Entry(form)
+        self.name_entry.grid(row=1, column=1, sticky="w", pady=5)
+        
+        # Payment Method
+        tk.Label(form, text="Payment Method:").grid(row=2, column=0, sticky="e", padx=5, pady=5)
+        self.payment_method = ttk.Combobox(form, values=["Credit Card", "Debit Card", "JazzCash", "Bank Transfer"])
+        self.payment_method.grid(row=2, column=1, sticky="w", pady=5)
+        
+        # Card/Account Number
+        tk.Label(form, text="Card/Account Number:").grid(row=3, column=0, sticky="e", padx=5, pady=5)
+        self.card_entry = ttk.Entry(form)
+        self.card_entry.grid(row=3, column=1, sticky="w", pady=5)
+        
+        # Password
+        tk.Label(form, text="Password:").grid(row=4, column=0, sticky="e", padx=5, pady=5)
+        self.password_entry = ttk.Entry(form, show="*")
+        self.password_entry.grid(row=4, column=1, sticky="w", pady=5)
+        
+        # Terms and Conditions
+        self.terms_var = tk.IntVar()
+        tk.Checkbutton(
+            self.form_frame,
+            text="I agree to the terms and conditions",
+            variable=self.terms_var,
+            onvalue=1,
+            offvalue=0
+        ).pack(pady=10)
+        
+        # Submit button
+        tk.Button(
+            self.form_frame,
+            text="Submit Payment",
+            bg="#4CAF50",
+            fg=self.WHITE,
+            font=("Helvetica", 12),
+            command=self.process_payment
+        ).pack(pady=20)
+    
+    def process_payment(self):
+        if not all([
+            self.name_entry.get(),
+            self.payment_method.get(),
+            self.card_entry.get(),
+            self.password_entry.get(),
+            self.terms_var.get() == 1
+        ]):
+            messagebox.showerror("Error", "Please fill all fields and agree to terms")
+            return
+        
+        confirm_msg = f"""
+        Please confirm your payment details:
+        
+        Course: {self.course_info['name']}
+        University: {self.course_info['university']}
+        Amount: ${self.course_info['price']}
+        
+        Payment Method: {self.payment_method.get()}
+        Card/Account: {self.card_entry.get()}
+        
+        Are you sure you want to proceed with payment?
+        """
+        
+        if messagebox.askyesno("Final Confirmation", confirm_msg):
+            # Get the current user (in a real app, this would come from login)
+            # For demo purposes, we'll use a default user
+            user = self.controller.get_user_by_email("demo@example.com")
+            if user:
+                success = self.controller.record_enrollment(
+                    user_id=user[0],
+                    course_name=self.course_info['name'],
+                    university=self.course_info['university'],
+                    price=self.course_info['price'],
+                    payment_method=self.payment_method.get()
+                )
+                if success:
+                    messagebox.showinfo("Success", "Payment successful! You are now enrolled in the course.")
+                    self.controller.show_page("HomePage")
+                else:
+                    messagebox.showerror("Error", "Failed to record enrollment")
+            else:
+                messagebox.showerror("Error", "User not found. Please login first.")
+        else:
+            messagebox.showinfo("Cancelled", "Payment was cancelled")
+
+# Run the application
+if _name_ == "_main_":
+    app = KnowledgeHubApp()
+    app.mainloop()
